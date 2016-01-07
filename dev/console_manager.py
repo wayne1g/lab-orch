@@ -249,8 +249,8 @@ def main():
                 print "TRYING telnet " + port + "\n--> NON FORMATTED RESPONSE:\n", repr(conn.response)
                 print "--> FORMATTED RESPONSE:\n", conn.response
 
-                port_user = raw_input('Console port / Device username: ')
-                port_password = raw_input('Console port / Device password: ')
+                port_user = raw_input('Enter Username for this Device ' + port + ': ')
+                port_password = raw_input('Enter Password for this Device ' + port + ': ')
                 logged_in, password_accepted = login_device(port_user, port_password, port, conn, logger)
 
                 if (logged_in is True) and (password_accepted is True):
