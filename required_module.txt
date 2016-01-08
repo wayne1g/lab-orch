@@ -1,0 +1,12 @@
+system readiness
+1. sudo apt-get updates
+
+installation of exscript
+1. sudo apt-get install python-pip python-dev git
+2. sudo pip install exscript
+3. sudo pip install ecdsa
+4. test the installation with this 'exscript --version'
+
+installation of yaml
+1. sudo pip install pyyaml
+

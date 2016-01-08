@@ -1,3 +1,4 @@
 .idea/
 /snipplets/
 *.log
+.DS_Store

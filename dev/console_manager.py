@@ -4,6 +4,7 @@ from Exscript.protocols.Exception import TimeoutException
 from Exscript import Account
 import collections
 import logging
+from pprint import pprint
 
 
 def do_something(job, host, conn):
@@ -14,6 +15,19 @@ def do_something(job, host, conn):
     conn.execute('ls -l')
     print conn.response
     print repr(conn.response)
+
+
+def read_config(config_file):
+    import yaml
+    logger = define_logger()
+    logger.info("Read console information from file - " + config_file)
+    with open(config_file, 'r') as ymlfile:
+        cfg = yaml.load(ymlfile)
+    # for section in cfg:
+    #     print('The section title of the config file.')
+    #     print(section)
+    # pprint(cfg['console_server'])
+    return cfg['console_server']
 
 
 def define_console_port():
@@ -271,4 +285,7 @@ def main():
     logger.info("Test Ended")
 
 if __name__ == "__main__":
+    console = read_config('config/config.yml')
+    print "The console config read from file is:"
+    pprint(console)
     main()
