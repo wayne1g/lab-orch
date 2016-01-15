@@ -10,3 +10,5 @@ installation of exscript
 installation of yaml
 1. sudo pip install pyyaml
 
+jinja2 - this seems to be available already in python installation
+1. sudo pip install Jinja2
