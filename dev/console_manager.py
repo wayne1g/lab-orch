@@ -233,9 +233,16 @@ def login_device(*args, **kwargs):
 
 
 def map_port_info(*args, **kwargs):
-    # kwargs = {'port_list': ['2-3, 6-8']}
-    # map port info read to individual port
-    # we will have a dictionary
+    """
+    kwargs = {'port_list': ['2-3, 6-8']}
+    This func maps the port info read in kwargs to individual port dictionary
+    It will look like
+    {'2': [{'username': 'foo'}, {'password': 'bar'}],
+     '3': [{'username': 'foo'}, {'password': 'bar'}],
+     '6': [{'username': 'foo'}, {'password': 'bar'}],
+     '7': [{'username': 'foo'}, {'password': 'bar'}],
+     '8': [{'username': 'foo'}, {'password': 'bar'}]}
+    """
     d = {}
     console = args[0]
     ports = console['ports']
@@ -249,15 +256,13 @@ def map_port_info(*args, **kwargs):
             else:
                 d[ele] = [{'username': console['ports'][0]['username']},
                           {'password': console['ports'][0]['password']}]
-    print "expanded port info"
-    print d
     return d
 
 
 def main(*args, **kwargs):
 
     logger = define_logger()
-    logger.info("Test Started")
+    logger.info(15*"=" + " Test Started " + 15*"=" + "\n")
 
     # The deployment config file should be kept here.
     # aka the current directory of this script.
@@ -265,8 +270,7 @@ def main(*args, **kwargs):
     # todo - Test if config file can be read.
     console_servers = read_config('config/config.yml', logger=logger)
 
-    print kwargs['use_yml']
-    if not kwargs['use_yml']:
+    if not kwargs['use_config_file']:
         # Define the jumphost IP address or FQDN
         jumphost = raw_input("The IP address or FQDN of the jumphost: ")
         # This is the username and password to login to the jumphost.
@@ -276,28 +280,19 @@ def main(*args, **kwargs):
         port_user = raw_input('Enter Username for this Device ' + port + ': ')
         port_password = raw_input('Enter Password for this Device ' + port + ': ')
         ports = define_console_port()
-        print("Test will use this list of console ports. " + str(ports))
-        logger.info("Test will use this list of console ports. " + str(ports))
     else:
         for console in console_servers:
             console_server = console['name']
-            print "console_server name is"
-            print console_server
             jumphost = console['jumphost']
             # make a list for all the ranges in the config read
             ports = map_port_info(console)
-            pprint(ports)
 
             for port, port_info in ports.iteritems():
                 port_str = console['name'] + "-p" + str(port)
-                print "running test for port", port_str
-                # todo - why many of the logger have doubled?
-                # [2016-01-16 19:04:49,901 console_manager.py:282 - main()] ---> INFO - Working on port acs3-p35.
-                # [2016-01-16 19:04:49,901 console_manager.py:282 - main()] ---> INFO - Working on port acs3-p35.
+                print "Running test for port, ", port_str
                 logger.info("Working on port " + port_str + ".")
                 port_dict = {}
                 port_dict[port] = port_info
-                pprint(port_dict)
                 console_port_disconnected = console_status_disconnect(console=console, port=port_dict, logger=logger,
                                                                       timeout=5, jumphost=jumphost)
                 if console_port_disconnected is False:
@@ -308,7 +303,6 @@ def main(*args, **kwargs):
                         conn = create_conn(jumphost=jumphost)
                         conn.set_timeout(timeout)
                         conn.set_prompt("Escape character is \'\^\]'\.")
-                        print "port_str is ", port_str
                         # todo - need to detect telnet error. add exception handling here.
                         conn.execute('telnet ' + port_str)
                         logged_in, password_accepted = login_device(console=console, port=port_dict, logger=logger,
@@ -319,7 +313,6 @@ def main(*args, **kwargs):
                             conn.set_prompt('[\r\n]+[\w\-\.]+@[\-\w+\.:]+[%>#$] ')
                             conn.execute('')
                             conn.execute('show version | no-more')
-                            print conn.response
                             logger.info(conn.response)
                             # Close the connection of the current port
                             # conn.send is used instead of conn.execute as we don't need to wait for any response.
@@ -329,7 +322,7 @@ def main(*args, **kwargs):
                         else:
                             logger.info(port_str + " No commands can be executed in the device.")
 
-    logger.info("Test Ended")
+    logger.info(15*"=" + " Test Ended " + 15*"=" + "\n")
 
 if __name__ == "__main__":
-    main(use_yml=True)
+    main(use_config_file=True)
