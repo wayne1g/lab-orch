@@ -74,10 +74,14 @@ def flatten(iterable, ltypes=collections.Iterable):
 
 # todo - make functions to use kwargs*
 def console_engage(*args, **kwargs):
+    port_str = kwargs['port'].keys()[0]
+    port_info = kwargs['port'].values()[0]
 
-    port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
+    port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
+    jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+
     timeout = kwargs['timeout']
-    conn = create_conn(jumphost=kwargs['jumphost'])
+    conn = create_conn(jumphost=jumphost['jumphost'])
     conn.set_timeout(timeout)
     logger = kwargs['logger']
 
@@ -127,8 +131,14 @@ def define_logger():
 
 # todo - convert all print statement to log
 def console_status_disconnect(*args, **kwargs):
-    port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
-    conn = create_conn(jumphost=kwargs['jumphost'])
+    port_str = kwargs['port'].keys()[0]
+    port_info = kwargs['port'].values()[0]
+
+    # port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
+    jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+
+    print "inside func port_str", port_str
+    conn = create_conn(jumphost=jumphost['jumphost'])
     conn.set_timeout(kwargs['timeout'])
 
     console_port_disconnect = None
@@ -184,9 +194,17 @@ def create_conn(*args, **kwargs):
 def login_device(*args, **kwargs):
     logger = kwargs['logger']
     conn = kwargs['conn']
-    port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
-    username = [a['username'] for a in kwargs['port'].values()[0] if 'username' in a.keys()][0]
-    password = [a['password'] for a in kwargs['port'].values()[0] if 'password' in a.keys()][0]
+
+    # port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
+    # username = [a['username'] for a in kwargs['port'].values()[0] if 'username' in a.keys()][0]
+    # password = [a['password'] for a in kwargs['port'].values()[0] if 'password' in a.keys()][0]
+
+    port_str = kwargs['port'].keys()[0]
+    port_info = kwargs['port'].values()[0]
+    port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
+    username = port['port']['username']
+    password = port['port']['password']
+
     attempt = 1
     retry = 3
     login_ready = None
@@ -246,16 +264,25 @@ def map_port_info(*args, **kwargs):
     d = {}
     console = args[0]
     ports = console['ports']
+    print('======================')
+    print "console is"
+    pprint(console)
     for p in ports:
         p_list = make_port_list(port_list=p['range'])
         for ele in p_list:
             if not d:
                 d = {}
-                d[ele] = [{'username': console['ports'][0]['username']},
-                          {'password': console['ports'][0]['password']}]
-            else:
-                d[ele] = [{'username': console['ports'][0]['username']},
-                          {'password': console['ports'][0]['password']}]
+            # d[console['name'] + '-p' + str(ele)] \
+            #     = [{'username': console['ports'][0]['username']},
+            #        {'password': console['ports'][0]['password']},
+            #        {'jumphost': console['jumphost']}]
+            d[console['name'] + '-p' + str(ele)] \
+                = [{'port': console['ports'][0]},
+                   {'jumphost': console['jumphost']}]
+    print('======================')
+    print "d is"
+    pprint(d)
+    print('======================')
     return d
 
 
@@ -282,30 +309,37 @@ def main(*args, **kwargs):
         ports = define_console_port()
     else:
         for console in console_servers:
-            console_server = console['name']
-            jumphost = console['jumphost']
+            # jumphost = console['jumphost']
             # make a list for all the ranges in the config read
-            ports = map_port_info(console)
+            mapped_ports = map_port_info(console)
 
-            for port, port_info in ports.iteritems():
-                port_str = console['name'] + "-p" + str(port)
-                print "Running test for port, ", port_str
+            # for port, port_info in ports.iteritems():
+            ports = [{stuff[0]:stuff[1]} for stuff in mapped_ports.iteritems()]
+            for port in ports:
+
+                port_str = port.keys()[0]
+                port_info = port.values()[0]
+                print port_str
+                print "Running test for port_str, ", port_str
+                print port_info
+                print "Running test for port_info, "
+                pprint(port_info)
                 logger.info("Working on port " + port_str + ".")
-                port_dict = {}
-                port_dict[port] = port_info
-                console_port_disconnected = console_status_disconnect(console=console, port=port_dict, logger=logger,
-                                                                      timeout=5, jumphost=jumphost)
+
+                console_port_disconnected = console_status_disconnect(port=port, timeout=5, logger=logger)
                 if console_port_disconnected is False:
-                    console_port_engaged = console_engage(console=console, port=port_dict, logger=logger, timeout=5,
-                                                          jumphost=jumphost)
+                    console_port_engaged = console_engage(port=port, timeout=5, logger=logger)
                     if console_port_engaged is False:
                         timeout = 5
-                        conn = create_conn(jumphost=jumphost)
+                        jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+                        print "fdsas "
+                        pprint(port)
+                        conn = create_conn(jumphost=jumphost.values()[0])
                         conn.set_timeout(timeout)
                         conn.set_prompt("Escape character is \'\^\]'\.")
                         # todo - need to detect telnet error. add exception handling here.
                         conn.execute('telnet ' + port_str)
-                        logged_in, password_accepted = login_device(console=console, port=port_dict, logger=logger,
+                        logged_in, password_accepted = login_device(port=port, logger=logger,
                                                                     timeout=5, conn=conn)
 
                         if (logged_in is True) and (password_accepted is True):
