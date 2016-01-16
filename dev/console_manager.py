@@ -21,12 +21,9 @@ def read_config(config_file):
     import yaml
     logger = define_logger()
     logger.info("Read console information from file - " + config_file)
+    # todo - exception handling cannot read file.
     with open(config_file, 'r') as ymlfile:
         cfg = yaml.load(ymlfile)
-    # for section in cfg:
-    #     print('The section title of the config file.')
-    #     print(section)
-    # pprint(cfg['console_server'])
     return cfg['console_server']
 
 
@@ -88,18 +85,11 @@ def console_engage(*args, **kwargs):
     while True:
         try:
             conn.set_prompt('Connection closed by foreign host\.')
-            print "NON FORMATTED RESPONSE:\n", repr(conn.response)
-            print "FORMATTED RESPONSE:\n:", conn.response
             conn.execute('telnet ' + port_str)
-            print "TRYING telnet " + port_str + "\n--> NON FORMATTED RESPONSE:\n", repr(conn.response)
-            print "--> FORMATTED RESPONSE\n:", conn.response
-            print "Console is engaged."
             console_port_engaged = True
             logger.info(port_str + " Connection to port closed - Port is engaged by other user/session.")
             break
         except TimeoutException as e:
-            # print e, " - Waited for ", timeout, " seconds. Console server did not reject. Port should be available."
-            # logger.error(port + " Connection timeout " + str(timeout) + " seconds.", exc_info=True)
             logger.info(port_str + " Connection successful in the last " + str(timeout) + " seconds. " +
                         "Port is NOT engaged by other user/session.")
             console_port_engaged = False
@@ -131,13 +121,7 @@ def define_logger():
 
 
 # todo - convert all print statement to log
-# def console_status_disconnect(jumphost, jumphost_user, jumphost_password, port, logger, timeout):
 def console_status_disconnect(*args, **kwargs):
-
-    # port = console_server + "-p" + str(port)
-
-    print "kwargs"
-    print kwargs
     port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
     conn = create_conn(jumphost=kwargs['jumphost'])
     conn.set_timeout(kwargs['timeout'])
@@ -145,30 +129,21 @@ def console_status_disconnect(*args, **kwargs):
     console_port_disconnect = None
     logger = kwargs['logger']
     timeout = kwargs['timeout']
-    # while True:
     try:
-        # todo - still cannot detect DISCONNECTED console port
+        # This prompt is specific to acs
         conn.set_prompt("Escape character is \'\^\]'\.")
         conn.execute('telnet ' + port_str)
-        print "TRYING telnet " + port_str + "\n--> NON FORMATTED RESPONSE:\n", repr(conn.response)
-        print "--> FORMATTED RESPONSE\n:", conn.response
         conn.set_prompt('(.*[\?\$:#].*)')
-        conn.execute('send_one_line')
-        print "TRYING sending empty string\n--> NON FORMATTED RESPONSE:\n", repr(conn.response)
-        print "--> FORMATTED RESPONSE\n:", conn.response
+        conn.execute('send_one_line_to_check_if_the_console_port_is_responsive')
         logger.info(port_str + " Received a character \':?$#\' in the device response " +
                     "within the last " + str(timeout) + " seconds. Port is connected.")
     except TimeoutException as e:
-        print "cannot match anything with :"
-        print "no response from device"
-        # print "Connection to port is established for the last", timeout, "seconds."
-        # print "Characters entered and read one line with additional characters returned."
-        # logger.info(port + " connection timeout "+ str(timeout) + " seconds.", exc_info=True)
         logger.info(port_str + " Cannot receive any of the character \':?$#\' in the device response " +
-                           "for the last " + str(timeout) + " seconds. Port could be disconnected.")
+                    "for the last " + str(timeout) + " seconds. Port could be disconnected.")
         console_port_disconnect = True
-        print conn.response
-        # break
+        # Nothing returned from the console port. conn.buffer has the line we sent sent.
+        # The last response is in conn.response. If there is any response, conn.buffer will have it instead.
+        logger.info(port_str + "\n" + conn.response)
     finally:
         if console_port_disconnect is None:
             console_port_disconnect = False
@@ -190,7 +165,7 @@ def create_conn(*args, **kwargs):
     # account = read_login()
     # account = Account('username', 'password')
     jumphost = kwargs['jumphost']
-    account = Account(jumphost['username'], \
+    account = Account(jumphost['username'],
                       jumphost['password'])
     conn = SSH2()
     # This is required for Centos jumphost issue. exscript cannot auto detect os in guess os
@@ -201,9 +176,7 @@ def create_conn(*args, **kwargs):
     return conn
 
 
-# def login_device(port_user, port_password, port, conn, logger):
 def login_device(*args, **kwargs):
-    pprint(kwargs)
     logger = kwargs['logger']
     conn = kwargs['conn']
     port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
@@ -215,12 +188,8 @@ def login_device(*args, **kwargs):
     while attempt < retry+1:
         try:
             conn.set_prompt('.*assword:')
-            # conn.execute('username in string')
-            # conn.execute(port_user)
             conn.execute(username)
             login_ready = True
-            print conn.response
-            print "Yes --> We get login prompt in attempt #", attempt, "\n"
             # logger.info(port + " Device give \"login:\" prompt in attempt " + str(attempt))
             logger.info(port_str + " Login attempt " + str(attempt) + " Device provided \"login:\" prompt.")
             # This block below will work for device that was logged in already
@@ -233,16 +202,16 @@ def login_device(*args, **kwargs):
             break
         except:
             login_ready = False
-            print "print cannot get prompt in attempt #", attempt
-            logger.info(port_str + " Login attempt " + str(attempt) + " Device did NOT give \"login:\" prompt in attempt ")
+            logger.info(port_str + " Login attempt " + str(attempt) +
+                        " Device did NOT give \"login:\" prompt in attempt ")
+            logger.info(port_str + str(conn.buffer))
         finally:
             # attempt += 1
             password_accepted = None
             if login_ready is True:
-                print "send password to port.", conn.response
+                logger.info(port_str + " Login attempt " + str(attempt) + ". Send password to device.")
                 try:
                     conn.set_prompt('[\r\n]+[\w\-\.]+@[\-\w+\.:]+[%>#$] ')
-                    # conn.execute('password in string')
                     conn.execute(password)
                     password_accepted = True
                     logger.info(port_str + " Password ACCEPTED in login attempt " + str(attempt))
@@ -254,7 +223,6 @@ def login_device(*args, **kwargs):
                 break
             else:
                 attempt += 1
-
     # The conn received for this function is not closed for ongoing operations in the device.
     return login_ready, password_accepted
 
@@ -262,6 +230,7 @@ def login_device(*args, **kwargs):
 def map_port_info(*args, **kwargs):
     # kwargs = {'port_list': ['2-3, 6-8']}
     # map port info read to individual port
+    # we will have a dictionary
     d = {}
     console = args[0]
     ports = console['ports']
@@ -270,12 +239,11 @@ def map_port_info(*args, **kwargs):
         for ele in p_list:
             if not d:
                 d = {}
-                d[ele] = [{'username':console['ports'][0]['username']},
-                          {'password':console['ports'][0]['password']}]
+                d[ele] = [{'username': console['ports'][0]['username']},
+                          {'password': console['ports'][0]['password']}]
             else:
-                # d[ele] = [console['ports'][0]['username'], console['ports'][0]['password']]
-                d[ele] = [{'username':console['ports'][0]['username']},
-                          {'password':console['ports'][0]['password']}]
+                d[ele] = [{'username': console['ports'][0]['username']},
+                          {'password': console['ports'][0]['password']}]
     print "expanded port info"
     print d
     return d
@@ -309,35 +277,30 @@ def main(*args, **kwargs):
             pprint(ports)
 
             for port, port_info in ports.iteritems():
-                print "running test for port", port
-                # port = console_server + "-p" + str(port)
-                # logger.info("Working on port " + port + ".")
+                port_str = console['name'] + "-p" + str(port)
+                print "running test for port", port_str
+                # todo - why many of the logger have doubled?
+                # [2016-01-16 19:04:49,901 console_manager.py:282 - main()] ---> INFO - Working on port acs3-p35.
+                # [2016-01-16 19:04:49,901 console_manager.py:282 - main()] ---> INFO - Working on port acs3-p35.
+                logger.info("Working on port " + port_str + ".")
                 port_dict = {}
                 port_dict[port] = port_info
                 pprint(port_dict)
-                console_port_disconnected = console_status_disconnect(console=console, port=port_dict, logger=logger, timeout=5, jumphost=jumphost)
-                # print "Console " + port + " Connection Status --> Disconnected?", console_port_disconnected
+                console_port_disconnected = console_status_disconnect(console=console, port=port_dict, logger=logger,
+                                                                      timeout=5, jumphost=jumphost)
                 if console_port_disconnected is False:
-                    console_port_engaged = console_engage(console=console, port=port_dict, logger=logger, timeout=5, jumphost=jumphost)
-                    # console_port_disconnected = console_status_disconnect(conn, port, 5)
-                    # print "Console Port Connection Status --> Disconnected?", console_port_disconnected
-
-                    print "console_port_engaged is --> ", console_port_engaged
+                    console_port_engaged = console_engage(console=console, port=port_dict, logger=logger, timeout=5,
+                                                          jumphost=jumphost)
                     if console_port_engaged is False:
                         timeout = 5
                         conn = create_conn(jumphost=jumphost)
                         conn.set_timeout(timeout)
                         conn.set_prompt("Escape character is \'\^\]'\.")
-                        port_str = console['name'] + "-p" + str(port)
                         print "port_str is ", port_str
                         # todo - need to detect telnet error. add exception handling here.
                         conn.execute('telnet ' + port_str)
-                        # print "TRYING telnet " + port + "\n--> NON FORMATTED RESPONSE:\n", repr(conn.response)
-                        print "--> FORMATTED RESPONSE:\n", conn.response
-                        print "ports range password"
-                        # print console['ports']['username']
-                        logged_in, password_accepted = login_device(console=console, port=port_dict, logger=logger, timeout=5, conn=conn)
-                        # logged_in, password_accepted = login_device(port_user, port_password, port, conn, logger)
+                        logged_in, password_accepted = login_device(console=console, port=port_dict, logger=logger,
+                                                                    timeout=5, conn=conn)
 
                         if (logged_in is True) and (password_accepted is True):
                             logger.info(port_str + " Execute commands in the device.")
@@ -360,7 +323,6 @@ if __name__ == "__main__":
     # The deployment config file should be kept here.
     # aka the current directory of this script.
     # console = read_config('config.yml')
-
     # todo - Test if config file can be read.
     console_servers = read_config('config/config.yml')
     print "The console config read from file is:"
