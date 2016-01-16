@@ -2,5 +2,3 @@
 /snipplets/
 *.log
 .DS_Store
-/dev/config/
-*config.yml
