@@ -17,9 +17,9 @@ def do_something(job, host, conn):
     print repr(conn.response)
 
 
-def read_config(config_file):
+def read_config(config_file, **logger):
     import yaml
-    logger = define_logger()
+    logger = logger['logger']
     logger.info("Read console information from file - " + config_file)
     # todo - exception handling cannot read file.
     with open(config_file, 'r') as ymlfile:
@@ -102,6 +102,11 @@ def console_engage(*args, **kwargs):
 
 
 def define_logger():
+    # logger needs to be a singleton. Otherwise, this time this is called.
+    # It will create another logger base on "logger.addHandler(handler)"
+    # Duplicate or more of the same log messages will appear.
+    # todo -This func has not been modified to this one suggested.
+    # http://stackoverflow.com/questions/7173033/duplicate-log-output-when-using-python-logging-module
     import os
     # Get the filename of this module
     log_file = os.path.basename(__file__)
@@ -141,7 +146,7 @@ def console_status_disconnect(*args, **kwargs):
         logger.info(port_str + " Cannot receive any of the character \':?$#\' in the device response " +
                     "for the last " + str(timeout) + " seconds. Port could be disconnected.")
         console_port_disconnect = True
-        # Nothing returned from the console port. conn.buffer has the line we sent sent.
+        # Nothing returned from the console port. conn.buffer has the line just sent.
         # The last response is in conn.response. If there is any response, conn.buffer will have it instead.
         logger.info(port_str + "\n" + conn.response)
     finally:
@@ -254,7 +259,14 @@ def main(*args, **kwargs):
     logger = define_logger()
     logger.info("Test Started")
 
-    if (not args) and (not kwargs):
+    # The deployment config file should be kept here.
+    # aka the current directory of this script.
+    # console = read_config('config.yml')
+    # todo - Test if config file can be read.
+    console_servers = read_config('config/config.yml', logger=logger)
+
+    print kwargs['use_yml']
+    if not kwargs['use_yml']:
         # Define the jumphost IP address or FQDN
         jumphost = raw_input("The IP address or FQDN of the jumphost: ")
         # This is the username and password to login to the jumphost.
@@ -320,11 +332,4 @@ def main(*args, **kwargs):
     logger.info("Test Ended")
 
 if __name__ == "__main__":
-    # The deployment config file should be kept here.
-    # aka the current directory of this script.
-    # console = read_config('config.yml')
-    # todo - Test if config file can be read.
-    console_servers = read_config('config/config.yml')
-    print "The console config read from file is:"
-    pprint(console_servers)
-    main(console_servers)
+    main(use_yml=True)
