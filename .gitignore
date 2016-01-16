@@ -4,3 +4,4 @@
 .DS_Store
 /dev/config/
 *config.yml
+# some changes to be ignored.
