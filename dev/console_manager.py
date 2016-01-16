@@ -195,10 +195,6 @@ def login_device(*args, **kwargs):
     logger = kwargs['logger']
     conn = kwargs['conn']
 
-    # port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
-    # username = [a['username'] for a in kwargs['port'].values()[0] if 'username' in a.keys()][0]
-    # password = [a['password'] for a in kwargs['port'].values()[0] if 'password' in a.keys()][0]
-
     port_str = kwargs['port'].keys()[0]
     port_info = kwargs['port'].values()[0]
     port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
