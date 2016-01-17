@@ -77,11 +77,11 @@ def console_engage(*args, **kwargs):
     port_str = kwargs['port'].keys()[0]
     port_info = kwargs['port'].values()[0]
 
-    port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
-    jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+    port = port_info['port']
+    jumphost = port_info['jumphost']
 
     timeout = kwargs['timeout']
-    conn = create_conn(jumphost=jumphost['jumphost'])
+    conn = create_conn(jumphost=jumphost)
     conn.set_timeout(timeout)
     logger = kwargs['logger']
 
@@ -135,10 +135,11 @@ def console_status_disconnect(*args, **kwargs):
     port_info = kwargs['port'].values()[0]
 
     # port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
-    jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+    # jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
+    jumphost = port_info['jumphost']
 
     print "inside func port_str", port_str
-    conn = create_conn(jumphost=jumphost['jumphost'])
+    conn = create_conn(jumphost=jumphost)
     conn.set_timeout(kwargs['timeout'])
 
     console_port_disconnect = None
@@ -195,15 +196,10 @@ def login_device(*args, **kwargs):
     logger = kwargs['logger']
     conn = kwargs['conn']
 
-    # port_str = kwargs['console']['name'] + "-p" + str(kwargs['port'].keys()[0])
-    # username = [a['username'] for a in kwargs['port'].values()[0] if 'username' in a.keys()][0]
-    # password = [a['password'] for a in kwargs['port'].values()[0] if 'password' in a.keys()][0]
-
     port_str = kwargs['port'].keys()[0]
     port_info = kwargs['port'].values()[0]
-    port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
-    username = port['port']['username']
-    password = port['port']['password']
+    username = port_info['port']['username']
+    password = port_info['port']['password']
 
     attempt = 1
     retry = 3
@@ -277,8 +273,8 @@ def map_port_info(*args, **kwargs):
             #        {'password': console['ports'][0]['password']},
             #        {'jumphost': console['jumphost']}]
             d[console['name'] + '-p' + str(ele)] \
-                = [{'port': console['ports'][0]},
-                   {'jumphost': console['jumphost']}]
+                = {'port': console['ports'][0],
+                   'jumphost': console['jumphost']}
     print('======================')
     print "d is"
     pprint(d)
@@ -313,28 +309,19 @@ def main(*args, **kwargs):
             # make a list for all the ranges in the config read
             mapped_ports = map_port_info(console)
 
-            # for port, port_info in ports.iteritems():
-            ports = [{stuff[0]:stuff[1]} for stuff in mapped_ports.iteritems()]
-            for port in ports:
-
-                port_str = port.keys()[0]
-                port_info = port.values()[0]
-                print port_str
-                print "Running test for port_str, ", port_str
-                print port_info
-                print "Running test for port_info, "
-                pprint(port_info)
-                logger.info("Working on port " + port_str + ".")
+            # ports = [{stuff[0]:stuff[1]} for stuff in mapped_ports.iteritems()]
+            for k, v in mapped_ports.items():
+                port = {k:v}
+                port_str = k
+                logger.info("Working on port " + port.keys()[0] + ".")
 
                 console_port_disconnected = console_status_disconnect(port=port, timeout=5, logger=logger)
                 if console_port_disconnected is False:
                     console_port_engaged = console_engage(port=port, timeout=5, logger=logger)
                     if console_port_engaged is False:
                         timeout = 5
-                        jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
-                        print "fdsas "
-                        pprint(port)
-                        conn = create_conn(jumphost=jumphost.values()[0])
+                        jumphost = v['jumphost']
+                        conn = create_conn(jumphost=jumphost)
                         conn.set_timeout(timeout)
                         conn.set_prompt("Escape character is \'\^\]'\.")
                         # todo - need to detect telnet error. add exception handling here.
