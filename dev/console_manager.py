@@ -78,10 +78,10 @@ def console_engage(*args, **kwargs):
     port_info = kwargs['port'].values()[0]
 
     port = port_info['port']
-    jumphost = port_info['jumphost']
+    jump_host = port_info['jump_host']
 
     timeout = kwargs['timeout']
-    conn = create_conn(jumphost=jumphost)
+    conn = create_conn(jump_host=jump_host)
     conn.set_timeout(timeout)
     logger = kwargs['logger']
 
@@ -130,25 +130,30 @@ def define_logger():
 
 
 # todo - convert all print statement to log
-def console_status_disconnect(*args, **kwargs):
+def console_physical_connection(*args, **kwargs):
     port_str = kwargs['port'].keys()[0]
     port_info = kwargs['port'].values()[0]
+    jump_host = port_info['jump_host']
+    logger = kwargs['logger']
+    timeout = kwargs['timeout']
 
-    # port = [stuff for stuff in port_info if stuff.keys()[0] == 'port'][0]
-    # jumphost = [stuff for stuff in port_info if stuff.keys()[0] == 'jumphost'][0]
-    jumphost = port_info['jumphost']
-
-    print "inside func port_str", port_str
-    conn = create_conn(jumphost=jumphost)
+    conn = create_conn(jump_host=jump_host)
     conn.set_timeout(kwargs['timeout'])
 
     console_port_disconnect = None
-    logger = kwargs['logger']
-    timeout = kwargs['timeout']
     try:
-        # This prompt is specific to acs
+        # This prompt is specific to acs console server
         conn.set_prompt("Escape character is \'\^\]'\.")
         conn.execute('telnet ' + port_str)
+        # Try to recover from -- more -- or the console was already logged in.
+        # The below text is sent, no matter what.
+        conn.send("exit\r")
+        conn.send("\x00")
+        conn.send("exit\r")
+        conn.send("\x00")
+        conn.send("quit\r")
+        conn.send("quit\r")
+        # Send this line to test if the port is disconnected.
         conn.set_prompt('(.*[\?\$:#].*)')
         conn.execute('send_one_line_to_check_if_the_console_port_is_responsive')
         logger.info(port_str + " Received a character \':?$#\' in the device response " +
@@ -166,33 +171,26 @@ def console_status_disconnect(*args, **kwargs):
             conn.set_prompt('.*')
             conn.execute('exit')
             conn.close()
-        # break
-    # print "check disconnect done, disconnected? ", console_port_disconnect
-    # if console_port_disconnect is False:
-    #     conn.set_prompt('.*')
-    #     conn.send('exit')
-    #     conn.close()
     return console_port_disconnect
 
 
-# todo - change the hardcoded credential to arguments for the function
 def create_conn(*args, **kwargs):
     # To read credential from stdin
     # account = read_login()
     # account = Account('username', 'password')
-    jumphost = kwargs['jumphost']
-    account = Account(jumphost['username'],
-                      jumphost['password'])
+    jump_host = kwargs['jump_host']
+    account = Account(jump_host['username'],
+                      jump_host['password'])
     conn = SSH2()
-    # This is required for Centos jumphost issue. exscript cannot auto detect os in guess os
+    # This is required for Centos jump_host issue. exscript cannot auto detect os in guess os
     conn.set_driver('shell')
-    conn.connect(jumphost['ip'])
-    # conn.connect('jumphost.foo.com')
+    conn.connect(jump_host['ip'])
+    # conn.connect('jump_host.foo.com')
     conn.login(account)
     return conn
 
 
-def login_device(*args, **kwargs):
+def login_attempt(*args, **kwargs):
     logger = kwargs['logger']
     conn = kwargs['conn']
 
@@ -203,7 +201,8 @@ def login_device(*args, **kwargs):
 
     attempt = 1
     retry = 3
-    login_ready = None
+    login_ready = password_accepted = None
+    # password_accepted = None
     while attempt < retry+1:
         try:
             conn.set_prompt('.*assword:')
@@ -248,14 +247,30 @@ def login_device(*args, **kwargs):
 
 def map_port_info(*args, **kwargs):
     """
-    kwargs = {'port_list': ['2-3, 6-8']}
     This func maps the port info read in kwargs to individual port dictionary
-    It will look like
-    {'2': [{'username': 'foo'}, {'password': 'bar'}],
-     '3': [{'username': 'foo'}, {'password': 'bar'}],
-     '6': [{'username': 'foo'}, {'password': 'bar'}],
-     '7': [{'username': 'foo'}, {'password': 'bar'}],
-     '8': [{'username': 'foo'}, {'password': 'bar'}]}
+    d will look like this.
+    {
+     'acs3-p3': {'jump_host': {'connection_type': 'telnet',
+                              'ip': '172.27.60.54',
+                              'name': None,
+                              'password': 'lab',
+                              'username': 'lab'},
+                 'port': {'connection_type': 'ssh',
+                          'password': 'lab123',
+                          'range': '3-4',
+                          'username': 'lab'}
+                 },
+     'acs3-p4': {'jump_host': {'connection_type': 'telnet',
+                              'ip': '172.27.60.54',
+                              'name': None,
+                              'password': 'lab',
+                              'username': 'lab'},
+                 'port': {'connection_type': 'ssh',
+                          'password': 'lab123',
+                          'range': '3-4',
+                          'username': 'lab'}
+                 }
+     }
     """
     d = {}
     console = args[0]
@@ -268,13 +283,11 @@ def map_port_info(*args, **kwargs):
         for ele in p_list:
             if not d:
                 d = {}
-            # d[console['name'] + '-p' + str(ele)] \
-            #     = [{'username': console['ports'][0]['username']},
-            #        {'password': console['ports'][0]['password']},
-            #        {'jumphost': console['jumphost']}]
+            # The key of d is specific for acs console server. 
+            # For other console server, we may need another key or port_str
             d[console['name'] + '-p' + str(ele)] \
                 = {'port': console['ports'][0],
-                   'jumphost': console['jumphost']}
+                   'jump_host': console['jump_host']}
     print('======================')
     print "d is"
     pprint(d)
@@ -285,7 +298,7 @@ def map_port_info(*args, **kwargs):
 def main(*args, **kwargs):
 
     logger = define_logger()
-    logger.info(15*"=" + " Test Started " + 15*"=" + "\n")
+    logger.info(15*"=" + " Test Started " + 15*"=")
 
     # The deployment config file should be kept here.
     # aka the current directory of this script.
@@ -294,47 +307,56 @@ def main(*args, **kwargs):
     console_servers = read_config('config/config.yml', logger=logger)
 
     if not kwargs['use_config_file']:
-        # Define the jumphost IP address or FQDN
-        jumphost = raw_input("The IP address or FQDN of the jumphost: ")
-        # This is the username and password to login to the jumphost.
-        jumphost_user = raw_input("Enter the username: ")
-        jumphost_password = raw_input("Enter the password: ")
+        # Define the jump_host IP address or FQDN
+        jump_host = raw_input("The IP address or FQDN of the jump_host: ")
+        # This is the username and password to login to the jump_host.
+        jump_host_user = raw_input("Enter the username: ")
+        jump_host_password = raw_input("Enter the password: ")
         console_server = raw_input("Enter the console server IP/FQDN: ")
         port_user = raw_input('Enter Username for this Device ' + port + ': ')
         port_password = raw_input('Enter Password for this Device ' + port + ': ')
         ports = define_console_port()
     else:
         for console in console_servers:
-            # jumphost = console['jumphost']
+            # jump_host = console['jump_host']
             # make a list for all the ranges in the config read
             mapped_ports = map_port_info(console)
 
-            # ports = [{stuff[0]:stuff[1]} for stuff in mapped_ports.iteritems()]
             for k, v in mapped_ports.items():
-                port = {k:v}
+                port = {k: v}
                 port_str = k
+                jump_host = v['jump_host']
                 logger.info("Working on port " + port.keys()[0] + ".")
 
-                console_port_disconnected = console_status_disconnect(port=port, timeout=5, logger=logger)
+                console_port_disconnected = console_physical_connection(port=port, timeout=5, logger=logger)
                 if console_port_disconnected is False:
                     console_port_engaged = console_engage(port=port, timeout=5, logger=logger)
                     if console_port_engaged is False:
                         timeout = 5
-                        jumphost = v['jumphost']
-                        conn = create_conn(jumphost=jumphost)
+                        conn = create_conn(jump_host=jump_host)
                         conn.set_timeout(timeout)
                         conn.set_prompt("Escape character is \'\^\]'\.")
                         # todo - need to detect telnet error. add exception handling here.
                         conn.execute('telnet ' + port_str)
-                        logged_in, password_accepted = login_device(port=port, logger=logger,
-                                                                    timeout=5, conn=conn)
+                        logged_in, password_accepted = login_attempt(port=port, logger=logger,
+                                                                     timeout=5, conn=conn)
 
                         if (logged_in is True) and (password_accepted is True):
                             logger.info(port_str + " Execute commands in the device.")
                             conn.set_prompt('[\r\n]+[\w\-\.]+@[\-\w+\.:]+[%>#$] ')
                             conn.execute('')
+                            # todo - exception handling
                             conn.execute('show version | no-more')
                             logger.info(conn.response)
+
+                            # add another CLI command
+                            # conn.set_prompt('.*Chassis.*')
+                            # todo - exception handling
+                            # conn.execute('show chassis hardware | no-more')
+                            # logger.info(conn.response)
+                            # reset prompt
+                            # conn.set_prompt('[\r\n]+[\w\-\.]+@[\-\w+\.:]+[%>#$] ')
+
                             # Close the connection of the current port
                             # conn.send is used instead of conn.execute as we don't need to wait for any response.
                             conn.send('exit\r')
